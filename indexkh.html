@@ -28,6 +28,24 @@
   .kh-order .row { display:flex; justify-content:space-between; gap:8px; }
   .kh-order .why { color:var(--muted); margin-top:2px; }
   .kh-pill { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+  .kh-card h2 { cursor:pointer; }
+  .kh-card h2:hover span:first-child { text-decoration:underline; }
+  #kh-detail { margin:0; padding:0 24px; }
+  .kh-dbox { background:var(--card); border:1px solid var(--line); border-top:8px solid var(--grey); border-radius:10px; padding:16px 20px; margin:16px 0; }
+  .kh-dbox.red { border-top-color:var(--red); } .kh-dbox.yellow { border-top-color:var(--yellow); } .kh-dbox.green { border-top-color:var(--green); }
+  .kh-dhead { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .kh-dhead h2 { margin:0; font-size:22px; }
+  .kh-close { border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:14px; }
+  .kh-facts { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px 20px; margin:14px 0; }
+  .kh-fact .k { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .kh-fact .v { font-size:15px; }
+  .kh-dbox h3 { font-size:15px; margin:16px 0 6px; }
+  .kh-dbox table { width:100%; border-collapse:collapse; font-size:13px; }
+  .kh-dbox th, .kh-dbox td { text-align:left; padding:6px 8px; border-top:1px solid var(--line); vertical-align:top; }
+  .kh-dbox th { color:var(--muted); font-weight:600; border-top:none; }
+  .kh-tablewrap { overflow-x:auto; }
+  .kh-note { background:#f6f4ee; border-radius:8px; padding:8px 12px; font-size:14px; }
+  .kh-low { color:var(--red); font-weight:700; }
   .red { background:var(--red); } .yellow { background:var(--yellow); } .green { background:var(--green); }
   .kh-card.red { border-left-color:var(--red); background:#fff; }
   .kh-card.yellow { border-left-color:var(--yellow); background:#fff; }
@@ -41,6 +59,7 @@
 </header>
 
 <div id="kh-map"></div>
+<div id="kh-detail"><div class="kh-rule" style="padding:12px 0">Click a supplier on the map, or a supplier name below, to see its details.</div></div>
 
 <div class="kh-legend">
   <strong>Order status:</strong>
@@ -105,13 +124,78 @@
     .filter(function (e) { return e.orders.length; })
     .sort(function (a, b) { return a.sup.supplier_name.localeCompare(b.sup.supplier_name); });
 
-  // ---- Supplier cards (alphabetical) ----
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+
+  // ---- Supplier detail panel (opens from a map pin or a supplier name) ----
+  var money = function (n) { return "$" + Number(n).toLocaleString("en-US"); };
+  function fact(k, v) { var f = el("div", "kh-fact"); f.appendChild(el("div", "k", k)); var d = el("div", "v"); if (v && v.nodeType) d.appendChild(v); else d.textContent = v; f.appendChild(d); return f; }
+  function table(heads, rows) {
+    var w = el("div", "kh-tablewrap"), tb = el("table"), tr = el("tr");
+    heads.forEach(function (h) { tr.appendChild(el("th", null, h)); }); tb.appendChild(tr);
+    rows.forEach(function (r) { var x = el("tr"); r.forEach(function (c) { var td = el("td"); if (c && c.nodeType) td.appendChild(c); else td.textContent = c; x.appendChild(td); }); tb.appendChild(x); });
+    w.appendChild(tb); return w;
+  }
+  var totalSpend = D.suppliers.reduce(function (a, s) { return a + Number(s.annual_spend_usd); }, 0);
+
+  function showDetail(e) {
+    var s = e.sup, panel = document.getElementById("kh-detail");
+    panel.textContent = "";
+    var box = el("div", "kh-dbox " + e.level);
+    var head = el("div", "kh-dhead");
+    var title = el("div"); title.appendChild(el("h2", null, s.supplier_name));
+    title.appendChild(el("div", "kh-sub", s.parts_supplied));
+    head.appendChild(title);
+    var right = el("div"); right.appendChild(el("span", "kh-badge " + e.level, "Orders: " + LABEL[e.level]));
+    right.appendChild(document.createTextNode(" "));
+    var close = el("button", "kh-close", "Close"); close.onclick = function () { panel.textContent = ""; };
+    right.appendChild(close); head.appendChild(right); box.appendChild(head);
+
+    var link = el("a", null, s.website); link.href = s.website; link.target = "_blank"; link.rel = "noopener";
+    var facts = el("div", "kh-facts");
+    facts.appendChild(fact("Factory", s.factory_site + " · " + s.factory_city + ", " + s.factory_region + ", " + s.factory_country));
+    facts.appendChild(fact("Website", link));
+    facts.appendChild(fact("Shipping route", s.shipping_route));
+    facts.appendChild(fact("US port of entry", s.us_port_of_entry));
+    facts.appendChild(fact("Normal lead time", s.lead_time_days + " days"));
+    facts.appendChild(fact("On-time delivery (12 mo)", s.on_time_delivery_pct_last_12_months + "%"));
+    facts.appendChild(fact("Annual spend", money(s.annual_spend_usd) + " (" + (100 * s.annual_spend_usd / totalSpend).toFixed(1) + "% of total)"));
+    facts.appendChild(fact("Contract ends", /^\d{4}-/.test(s.contract_end) ? fmt(s.contract_end) : s.contract_end));
+    facts.appendChild(fact("Payment terms", s.payment_terms));
+    box.appendChild(facts);
+    if (s.notes) box.appendChild(el("div", "kh-note", s.notes));
+
+    // Parts we buy from them, with stock on our shelves
+    box.appendChild(el("h3", null, "Parts we buy and stock on hand"));
+    var parts = D.parts.filter(function (p) { return p.supplier_id === s.supplier_id; });
+    box.appendChild(table(["Part", "Description", "Only source?", "Unit cost", "On hand", "Safety stock", "Weeks of cover"],
+      parts.map(function (p) {
+        var inv = D.inventory.filter(function (i) { return i.part_number === p.part_number; })[0] || {};
+        var low = inv.on_hand_units != null && Number(inv.on_hand_units) <= Number(inv.safety_stock_units);
+        var cover = el("span", low ? "kh-low" : null, inv.weeks_of_cover != null ? inv.weeks_of_cover + (low ? " (at safety stock)" : "") : "–");
+        return [p.part_number, p.description, p.only_source, "$" + Number(p.unit_cost_usd).toFixed(2),
+                inv.on_hand_units != null ? Number(inv.on_hand_units).toLocaleString() : "–",
+                inv.safety_stock_units != null ? Number(inv.safety_stock_units).toLocaleString() : "–", cover];
+      })));
+
+    // Open orders with colors and reasons
+    box.appendChild(el("h3", null, "Open orders"));
+    box.appendChild(table(["PO", "Part", "Qty", "Status", "Ordered", "Ships", "Arrives", "Color", "Why"],
+      e.orders.map(function (x) {
+        var c = el("span"); c.appendChild(el("span", "kh-pill " + x.g.level)); c.appendChild(document.createTextNode(LABEL[x.g.level]));
+        return [x.o.po_number, x.o.part_number, Number(x.o.quantity).toLocaleString(), x.o.status,
+                fmt(x.o.order_date), fmt(x.o.promised_ship_date), fmt(x.o.promised_arrival_date), c, x.g.why];
+      })));
+    panel.appendChild(box);
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // ---- Supplier cards (alphabetical) ----
   var box = document.getElementById("kh-suppliers");
   list.forEach(function (e) {
     var card = el("div", "kh-card " + e.level);
     var h = el("h2"); h.appendChild(el("span", null, e.sup.supplier_name));
     h.appendChild(el("span", "kh-badge " + e.level + (e.level === "yellow" ? " yellow" : ""), LABEL[e.level]));
+    h.title = "Click for supplier details"; h.onclick = function () { showDetail(e); };
     card.appendChild(h);
     card.appendChild(el("div", "kh-sub", e.sup.parts_supplied + " · " + e.sup.factory_city + ", " + e.sup.factory_country));
     e.orders.forEach(function (x) {
@@ -160,7 +244,9 @@
     var b = document.createElement("b"); b.textContent = e.sup.supplier_name; tip.appendChild(b);
     tip.appendChild(document.createElement("br"));
     tip.appendChild(document.createTextNode(e.sup.factory_city + ", " + e.sup.factory_country + " · " + LABEL[e.level] + " · " + e.orders.length + " open order" + (e.orders.length > 1 ? "s" : "")));
-    m.bindPopup(tip); m.bindTooltip(e.sup.supplier_name);
+    m.bindTooltip(e.sup.supplier_name + " (click for details)");
+    m.on("click", function () { showDetail(e); });
+    m._path && m._path.setAttribute("style", "cursor:pointer");
   });
   map.fitBounds(L.latLngBounds(pts).pad(0.1));
 })();
