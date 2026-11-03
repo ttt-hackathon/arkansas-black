@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laurel Ridge Bikeworks · Supplier Orders Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --ink:#1f2a24; --muted:#5b6b62; --bg:#f6f4ee; --card:#fff; --line:#ddd8cc;
+          --red:#c62828; --yellow:#f2b705; --green:#2e8b57; --grey:#8a948e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header.kh-top { padding:16px 24px; }
+  header.kh-top h1 { margin:0; font-size:24px; }
+  header.kh-top p { margin:4px 0 0; color:var(--muted); font-size:14px; }
+  #kh-map { height:420px; width:100%; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:#e8ecea; }
+  .kh-maperror { padding:24px; color:var(--muted); }
+  .kh-legend { display:flex; flex-wrap:wrap; gap:16px; padding:12px 24px; font-size:14px; align-items:center; }
+  .kh-legend span.dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .kh-rule { padding:0 24px 8px; color:var(--muted); font-size:13px; max-width:900px; }
+  #kh-suppliers { padding:8px 24px 40px; display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+  .kh-card { background:var(--card); border:1px solid var(--line); border-left-width:10px; border-radius:10px; padding:14px 16px; }
+  .kh-card h2 { margin:0; font-size:17px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .kh-badge { color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:12px; white-space:nowrap; }
+  .kh-badge.yellow { color:#2b2200; }
+  .kh-sub { color:var(--muted); font-size:13px; margin:2px 0 10px; }
+  .kh-order { border-top:1px solid var(--line); padding:8px 0; font-size:13px; }
+  .kh-order .row { display:flex; justify-content:space-between; gap:8px; }
+  .kh-order .why { color:var(--muted); margin-top:2px; }
+  .kh-pill { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+  .red { background:var(--red); } .yellow { background:var(--yellow); } .green { background:var(--green); }
+  .kh-card.red { border-left-color:var(--red); background:#fff; }
+  .kh-card.yellow { border-left-color:var(--yellow); background:#fff; }
+  .kh-card.green { border-left-color:var(--green); background:#fff; }
+</style>
+</head>
+<body>
+<header class="kh-top">
+  <h1>Laurel Ridge Bikeworks · Supplier Orders</h1>
+  <p id="kh-asof"></p>
+</header>
+
+<div id="kh-map"></div>
+
+<div class="kh-legend">
+  <strong>Order status:</strong>
+  <span><span class="dot red"></span>Red = Delayed</span>
+  <span><span class="dot yellow"></span>Yellow = Behind</span>
+  <span><span class="dot green"></span>Green = On time</span>
+  <span><span class="dot" style="background:#1f2a24"></span>Our plant (Hendersonville)</span>
+</div>
+<div class="kh-rule" id="kh-rule"></div>
+
+<div id="kh-suppliers"></div>
+
+<script src="data/laurel-ridge-data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  var D = window.LAUREL_RIDGE;
+  var TODAY = D.asOf; // dashboard "today" is the date our data is current to
+  var DAY = 86400000;
+  function t(s) { return Date.parse(s + "T00:00:00Z"); }
+  function fmt(s) { return new Date(t(s)).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }); }
+
+  // Rule for turning an order into red / yellow / green.
+  // Our data has shipping status but no "late" flag, so we work it out from dates.
+  var BEHIND_DAYS = 3, DELAYED_DAYS = 15;
+  document.getElementById("kh-asof").textContent = "Data as of " + fmt(TODAY) + " · real supplier locations, fictional order data";
+  document.getElementById("kh-rule").innerHTML =
+    "<b>How we color an order:</b> we compare the promised arrival date with the supplier's normal lead time (order date + lead time). " +
+    "Green = within 2 days. Yellow (behind) = " + BEHIND_DAYS + "–" + (DELAYED_DAYS - 1) + " days later than normal, or still awaiting shipment on its ship date. " +
+    "Red (delayed) = " + DELAYED_DAYS + "+ days later than normal, or still awaiting shipment after its promised ship date. " +
+    "A supplier's color is its worst order.";
+
+  var RANK = { green:0, yellow:1, red:2 };
+  var LABEL = { green:"On time", yellow:"Behind", red:"Delayed" };
+  var COLOR = { green:"#2e8b57", yellow:"#f2b705", red:"#c62828" };
+
+  function grade(o, sup) {
+    var normal = t(o.order_date) + sup.lead_time_days * DAY;
+    var late = Math.round((t(o.promised_arrival_date) - normal) / DAY);
+    var level = "green", why = [];
+    if (late >= DELAYED_DAYS) { level = "red"; }
+    else if (late >= BEHIND_DAYS) { level = "yellow"; }
+    if (late >= BEHIND_DAYS) why.push("Promised arrival is " + late + " days later than the normal " + sup.lead_time_days + "-day lead time.");
+    if (o.status === "Awaiting shipment") {
+      if (t(o.promised_ship_date) < t(TODAY)) { level = "red"; why.push("Should have shipped " + fmt(o.promised_ship_date) + " but has not."); }
+      else if (t(o.promised_ship_date) === t(TODAY) && RANK[level] < 1) { level = "yellow"; why.push("Due to ship today and has not shipped yet."); }
+    }
+    if (!why.length) why.push("Promised arrival matches the normal lead time.");
+    return { level: level, why: why.join(" ") };
+  }
+
+  // Suppliers that have at least one open order
+  var bySupplier = {};
+  D.suppliers.forEach(function (s) { bySupplier[s.supplier_id] = { sup: s, orders: [], level: "green" }; });
+  D.openOrders.forEach(function (o) {
+    var e = bySupplier[o.supplier_id]; if (!e) return;
+    var g = grade(o, e.sup);
+    e.orders.push({ o: o, g: g });
+    if (RANK[g.level] > RANK[e.level]) e.level = g.level;
+  });
+  var list = Object.keys(bySupplier).map(function (k) { return bySupplier[k]; })
+    .filter(function (e) { return e.orders.length; })
+    .sort(function (a, b) { return a.sup.supplier_name.localeCompare(b.sup.supplier_name); });
+
+  // ---- Supplier cards (alphabetical) ----
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  var box = document.getElementById("kh-suppliers");
+  list.forEach(function (e) {
+    var card = el("div", "kh-card " + e.level);
+    var h = el("h2"); h.appendChild(el("span", null, e.sup.supplier_name));
+    h.appendChild(el("span", "kh-badge " + e.level + (e.level === "yellow" ? " yellow" : ""), LABEL[e.level]));
+    card.appendChild(h);
+    card.appendChild(el("div", "kh-sub", e.sup.parts_supplied + " · " + e.sup.factory_city + ", " + e.sup.factory_country));
+    e.orders.forEach(function (x) {
+      var d = el("div", "kh-order");
+      var r = el("div", "row");
+      var left = el("span"); left.appendChild(el("span", "kh-pill " + x.g.level));
+      left.appendChild(document.createTextNode(x.o.po_number + " · " + Number(x.o.quantity).toLocaleString() + " units"));
+      r.appendChild(left); r.appendChild(el("span", null, x.o.status));
+      d.appendChild(r);
+      d.appendChild(el("div", "why", "Ships " + fmt(x.o.promised_ship_date) + " · arrives " + fmt(x.o.promised_arrival_date) + " · " + LABEL[x.g.level] + ". " + x.g.why));
+      card.appendChild(d);
+    });
+    box.appendChild(card);
+  });
+
+  // ---- Map ----
+  // Approximate coordinates for each factory city (city-level, not street addresses).
+  var CITY = {
+    "Waynesville": [35.488, -82.989], "Miskolc": [48.103, 20.778], "Suzhou": [31.299, 120.585],
+    "Taichung": [24.147, 120.674], "Tainan": [22.999, 120.227], "Pekan Nanas, Pontian": [1.49, 103.46],
+    "Korbach": [51.272, 8.873], "Biel/Bienne": [47.137, 7.247], "Meinerzhagen": [51.108, 7.64],
+    "Pozzoleone": [45.6, 11.62], "Pleasant Prairie": [42.52, -87.95]
+  };
+  var HQ = [35.318, -82.461];
+  var mapEl = document.getElementById("kh-map");
+  if (!window.L) {
+    mapEl.className = "kh-maperror";
+    mapEl.textContent = "The map needs an internet connection to load. The supplier list below still works.";
+    return;
+  }
+  var map = L.map("kh-map", { worldCopyJump: true }).setView([30, 10], 2);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  var seen = {}, pts = [HQ];
+  L.circleMarker(HQ, { radius: 8, color: "#fff", weight: 2, fillColor: "#1f2a24", fillOpacity: 1 })
+    .addTo(map).bindTooltip("Laurel Ridge Bikeworks · Hendersonville, NC");
+  list.forEach(function (e) {
+    var c = CITY[e.sup.factory_city]; if (!c) return;
+    var n = seen[e.sup.factory_city] = (seen[e.sup.factory_city] || 0) + 1;
+    var pos = [c[0] + (n - 1) * 0.9, c[1] + (n - 1) * 0.9]; // nudge suppliers sharing a city so none hide each other
+    pts.push(pos);
+    var m = L.circleMarker(pos, { radius: 10, color: "#fff", weight: 2, fillColor: COLOR[e.level], fillOpacity: 1 }).addTo(map);
+    var tip = document.createElement("div");
+    var b = document.createElement("b"); b.textContent = e.sup.supplier_name; tip.appendChild(b);
+    tip.appendChild(document.createElement("br"));
+    tip.appendChild(document.createTextNode(e.sup.factory_city + ", " + e.sup.factory_country + " · " + LABEL[e.level] + " · " + e.orders.length + " open order" + (e.orders.length > 1 ? "s" : "")));
+    m.bindPopup(tip); m.bindTooltip(e.sup.supplier_name);
+  });
+  map.fitBounds(L.latLngBounds(pts).pad(0.1));
+})();
+</script>
+</body>
+</html>
