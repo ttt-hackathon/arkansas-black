@@ -13,7 +13,7 @@
   header.kh-top { padding:16px 24px; }
   header.kh-top h1 { margin:0; font-size:24px; }
   header.kh-top p { margin:4px 0 0; color:var(--muted); font-size:14px; }
-  #kh-map { height:420px; width:100%; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:#e8ecea; }
+  #kh-map { height:480px; width:100%; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:#e8ecea; }
   .kh-maperror { padding:24px; color:var(--muted); }
   .kh-legend { display:flex; flex-wrap:wrap; gap:16px; padding:12px 24px; font-size:14px; align-items:center; }
   .kh-legend span.dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-1px; }
@@ -21,6 +21,8 @@
   #kh-suppliers { padding:8px 24px 40px; display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
   .kh-card { background:var(--card); border:1px solid var(--line); border-left-width:10px; border-radius:10px; padding:14px 16px; }
   .kh-card h2 { margin:0; font-size:17px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .kh-card h2 a { color:inherit; text-decoration:none; }
+  .kh-card h2 a:hover { text-decoration:underline; }
   .kh-badge { color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:12px; white-space:nowrap; }
   .kh-badge.yellow { color:#2b2200; }
   .kh-sub { color:var(--muted); font-size:13px; margin:2px 0 10px; }
@@ -28,24 +30,6 @@
   .kh-order .row { display:flex; justify-content:space-between; gap:8px; }
   .kh-order .why { color:var(--muted); margin-top:2px; }
   .kh-pill { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
-  .kh-card h2 { cursor:pointer; }
-  .kh-card h2:hover span:first-child { text-decoration:underline; }
-  #kh-detail { margin:0; padding:0 24px; }
-  .kh-dbox { background:var(--card); border:1px solid var(--line); border-top:8px solid var(--grey); border-radius:10px; padding:16px 20px; margin:16px 0; }
-  .kh-dbox.red { border-top-color:var(--red); } .kh-dbox.yellow { border-top-color:var(--yellow); } .kh-dbox.green { border-top-color:var(--green); }
-  .kh-dhead { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-  .kh-dhead h2 { margin:0; font-size:22px; }
-  .kh-close { border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:14px; }
-  .kh-facts { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px 20px; margin:14px 0; }
-  .kh-fact .k { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
-  .kh-fact .v { font-size:15px; }
-  .kh-dbox h3 { font-size:15px; margin:16px 0 6px; }
-  .kh-dbox table { width:100%; border-collapse:collapse; font-size:13px; }
-  .kh-dbox th, .kh-dbox td { text-align:left; padding:6px 8px; border-top:1px solid var(--line); vertical-align:top; }
-  .kh-dbox th { color:var(--muted); font-weight:600; border-top:none; }
-  .kh-tablewrap { overflow-x:auto; }
-  .kh-note { background:#f6f4ee; border-radius:8px; padding:8px 12px; font-size:14px; }
-  .kh-low { color:var(--red); font-weight:700; }
   .red { background:var(--red); } .yellow { background:var(--yellow); } .green { background:var(--green); }
   .kh-card.red { border-left-color:var(--red); background:#fff; }
   .kh-card.yellow { border-left-color:var(--yellow); background:#fff; }
@@ -59,7 +43,6 @@
 </header>
 
 <div id="kh-map"></div>
-<div id="kh-detail"><div class="kh-rule" style="padding:12px 0">Click a supplier on the map, or a supplier name below, to see its details.</div></div>
 
 <div class="kh-legend">
   <strong>Order status:</strong>
@@ -67,135 +50,32 @@
   <span><span class="dot yellow"></span>Yellow = Behind</span>
   <span><span class="dot green"></span>Green = On time</span>
   <span><span class="dot" style="background:#1f2a24"></span>Our plant (Hendersonville)</span>
+  <span style="color:var(--muted)">Click a pin or a supplier name to open its details page.</span>
 </div>
 <div class="kh-rule" id="kh-rule"></div>
 
 <div id="kh-suppliers"></div>
 
 <script src="data/laurel-ridge-data.js"></script>
+<script src="kh-shared.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
-  var D = window.LAUREL_RIDGE;
-  var TODAY = D.asOf; // dashboard "today" is the date our data is current to
-  var DAY = 86400000;
-  function t(s) { return Date.parse(s + "T00:00:00Z"); }
-  function fmt(s) { return new Date(t(s)).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }); }
+  var K = window.KH, el = K.el, LABEL = K.LABEL, COLOR = K.COLOR;
+  document.getElementById("kh-asof").textContent = "Data as of " + K.fmt(K.TODAY) + " · real supplier locations, fictional order data";
+  document.getElementById("kh-rule").innerHTML = K.ruleText();
 
-  // Rule for turning an order into red / yellow / green.
-  // Our data has shipping status but no "late" flag, so we work it out from dates.
-  var BEHIND_DAYS = 3, DELAYED_DAYS = 15;
-  document.getElementById("kh-asof").textContent = "Data as of " + fmt(TODAY) + " · real supplier locations, fictional order data";
-  document.getElementById("kh-rule").innerHTML =
-    "<b>How we color an order:</b> we compare the promised arrival date with the supplier's normal lead time (order date + lead time). " +
-    "Green = within 2 days. Yellow (behind) = " + BEHIND_DAYS + "–" + (DELAYED_DAYS - 1) + " days later than normal, or still awaiting shipment on its ship date. " +
-    "Red (delayed) = " + DELAYED_DAYS + "+ days later than normal, or still awaiting shipment after its promised ship date. " +
-    "A supplier's color is its worst order.";
-
-  var RANK = { green:0, yellow:1, red:2 };
-  var LABEL = { green:"On time", yellow:"Behind", red:"Delayed" };
-  var COLOR = { green:"#2e8b57", yellow:"#f2b705", red:"#c62828" };
-
-  function grade(o, sup) {
-    var normal = t(o.order_date) + sup.lead_time_days * DAY;
-    var late = Math.round((t(o.promised_arrival_date) - normal) / DAY);
-    var level = "green", why = [];
-    if (late >= DELAYED_DAYS) { level = "red"; }
-    else if (late >= BEHIND_DAYS) { level = "yellow"; }
-    if (late >= BEHIND_DAYS) why.push("Promised arrival is " + late + " days later than the normal " + sup.lead_time_days + "-day lead time.");
-    if (o.status === "Awaiting shipment") {
-      if (t(o.promised_ship_date) < t(TODAY)) { level = "red"; why.push("Should have shipped " + fmt(o.promised_ship_date) + " but has not."); }
-      else if (t(o.promised_ship_date) === t(TODAY) && RANK[level] < 1) { level = "yellow"; why.push("Due to ship today and has not shipped yet."); }
-    }
-    if (!why.length) why.push("Promised arrival matches the normal lead time.");
-    return { level: level, why: why.join(" ") };
-  }
-
-  // Suppliers that have at least one open order
-  var bySupplier = {};
-  D.suppliers.forEach(function (s) { bySupplier[s.supplier_id] = { sup: s, orders: [], level: "green" }; });
-  D.openOrders.forEach(function (o) {
-    var e = bySupplier[o.supplier_id]; if (!e) return;
-    var g = grade(o, e.sup);
-    e.orders.push({ o: o, g: g });
-    if (RANK[g.level] > RANK[e.level]) e.level = g.level;
-  });
-  var list = Object.keys(bySupplier).map(function (k) { return bySupplier[k]; })
-    .filter(function (e) { return e.orders.length; })
-    .sort(function (a, b) { return a.sup.supplier_name.localeCompare(b.sup.supplier_name); });
-
-  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
-
-  // ---- Supplier detail panel (opens from a map pin or a supplier name) ----
-  var money = function (n) { return "$" + Number(n).toLocaleString("en-US"); };
-  function fact(k, v) { var f = el("div", "kh-fact"); f.appendChild(el("div", "k", k)); var d = el("div", "v"); if (v && v.nodeType) d.appendChild(v); else d.textContent = v; f.appendChild(d); return f; }
-  function table(heads, rows) {
-    var w = el("div", "kh-tablewrap"), tb = el("table"), tr = el("tr");
-    heads.forEach(function (h) { tr.appendChild(el("th", null, h)); }); tb.appendChild(tr);
-    rows.forEach(function (r) { var x = el("tr"); r.forEach(function (c) { var td = el("td"); if (c && c.nodeType) td.appendChild(c); else td.textContent = c; x.appendChild(td); }); tb.appendChild(x); });
-    w.appendChild(tb); return w;
-  }
-  var totalSpend = D.suppliers.reduce(function (a, s) { return a + Number(s.annual_spend_usd); }, 0);
-
-  function showDetail(e) {
-    var s = e.sup, panel = document.getElementById("kh-detail");
-    panel.textContent = "";
-    var box = el("div", "kh-dbox " + e.level);
-    var head = el("div", "kh-dhead");
-    var title = el("div"); title.appendChild(el("h2", null, s.supplier_name));
-    title.appendChild(el("div", "kh-sub", s.parts_supplied));
-    head.appendChild(title);
-    var right = el("div"); right.appendChild(el("span", "kh-badge " + e.level, "Orders: " + LABEL[e.level]));
-    right.appendChild(document.createTextNode(" "));
-    var close = el("button", "kh-close", "Close"); close.onclick = function () { panel.textContent = ""; };
-    right.appendChild(close); head.appendChild(right); box.appendChild(head);
-
-    var link = el("a", null, s.website); link.href = s.website; link.target = "_blank"; link.rel = "noopener";
-    var facts = el("div", "kh-facts");
-    facts.appendChild(fact("Factory", s.factory_site + " · " + s.factory_city + ", " + s.factory_region + ", " + s.factory_country));
-    facts.appendChild(fact("Website", link));
-    facts.appendChild(fact("Shipping route", s.shipping_route));
-    facts.appendChild(fact("US port of entry", s.us_port_of_entry));
-    facts.appendChild(fact("Normal lead time", s.lead_time_days + " days"));
-    facts.appendChild(fact("On-time delivery (12 mo)", s.on_time_delivery_pct_last_12_months + "%"));
-    facts.appendChild(fact("Annual spend", money(s.annual_spend_usd) + " (" + (100 * s.annual_spend_usd / totalSpend).toFixed(1) + "% of total)"));
-    facts.appendChild(fact("Contract ends", /^\d{4}-/.test(s.contract_end) ? fmt(s.contract_end) : s.contract_end));
-    facts.appendChild(fact("Payment terms", s.payment_terms));
-    box.appendChild(facts);
-    if (s.notes) box.appendChild(el("div", "kh-note", s.notes));
-
-    // Parts we buy from them, with stock on our shelves
-    box.appendChild(el("h3", null, "Parts we buy and stock on hand"));
-    var parts = D.parts.filter(function (p) { return p.supplier_id === s.supplier_id; });
-    box.appendChild(table(["Part", "Description", "Only source?", "Unit cost", "On hand", "Safety stock", "Weeks of cover"],
-      parts.map(function (p) {
-        var inv = D.inventory.filter(function (i) { return i.part_number === p.part_number; })[0] || {};
-        var low = inv.on_hand_units != null && Number(inv.on_hand_units) <= Number(inv.safety_stock_units);
-        var cover = el("span", low ? "kh-low" : null, inv.weeks_of_cover != null ? inv.weeks_of_cover + (low ? " (at safety stock)" : "") : "–");
-        return [p.part_number, p.description, p.only_source, "$" + Number(p.unit_cost_usd).toFixed(2),
-                inv.on_hand_units != null ? Number(inv.on_hand_units).toLocaleString() : "–",
-                inv.safety_stock_units != null ? Number(inv.safety_stock_units).toLocaleString() : "–", cover];
-      })));
-
-    // Open orders with colors and reasons
-    box.appendChild(el("h3", null, "Open orders"));
-    box.appendChild(table(["PO", "Part", "Qty", "Status", "Ordered", "Ships", "Arrives", "Color", "Why"],
-      e.orders.map(function (x) {
-        var c = el("span"); c.appendChild(el("span", "kh-pill " + x.g.level)); c.appendChild(document.createTextNode(LABEL[x.g.level]));
-        return [x.o.po_number, x.o.part_number, Number(x.o.quantity).toLocaleString(), x.o.status,
-                fmt(x.o.order_date), fmt(x.o.promised_ship_date), fmt(x.o.promised_arrival_date), c, x.g.why];
-      })));
-    panel.appendChild(box);
-    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
+  var list = K.entries();
+  function detailUrl(e) { return "supplierkh.html?id=" + encodeURIComponent(e.sup.supplier_id); }
 
   // ---- Supplier cards (alphabetical) ----
   var box = document.getElementById("kh-suppliers");
   list.forEach(function (e) {
     var card = el("div", "kh-card " + e.level);
-    var h = el("h2"); h.appendChild(el("span", null, e.sup.supplier_name));
-    h.appendChild(el("span", "kh-badge " + e.level + (e.level === "yellow" ? " yellow" : ""), LABEL[e.level]));
-    h.title = "Click for supplier details"; h.onclick = function () { showDetail(e); };
+    var h = el("h2"), a = el("a", null, e.sup.supplier_name);
+    a.href = detailUrl(e); a.title = "Open supplier details";
+    var nameWrap = el("span"); nameWrap.appendChild(a); h.appendChild(nameWrap);
+    h.appendChild(el("span", "kh-badge " + e.level, LABEL[e.level]));
     card.appendChild(h);
     card.appendChild(el("div", "kh-sub", e.sup.parts_supplied + " · " + e.sup.factory_city + ", " + e.sup.factory_country));
     e.orders.forEach(function (x) {
@@ -205,7 +85,7 @@
       left.appendChild(document.createTextNode(x.o.po_number + " · " + Number(x.o.quantity).toLocaleString() + " units"));
       r.appendChild(left); r.appendChild(el("span", null, x.o.status));
       d.appendChild(r);
-      d.appendChild(el("div", "why", "Ships " + fmt(x.o.promised_ship_date) + " · arrives " + fmt(x.o.promised_arrival_date) + " · " + LABEL[x.g.level] + ". " + x.g.why));
+      d.appendChild(el("div", "why", "Ships " + K.fmt(x.o.promised_ship_date) + " · arrives " + K.fmt(x.o.promised_arrival_date) + " · " + LABEL[x.g.level] + ". " + x.g.why));
       card.appendChild(d);
     });
     box.appendChild(card);
@@ -240,13 +120,8 @@
     var pos = [c[0] + (n - 1) * 0.9, c[1] + (n - 1) * 0.9]; // nudge suppliers sharing a city so none hide each other
     pts.push(pos);
     var m = L.circleMarker(pos, { radius: 10, color: "#fff", weight: 2, fillColor: COLOR[e.level], fillOpacity: 1 }).addTo(map);
-    var tip = document.createElement("div");
-    var b = document.createElement("b"); b.textContent = e.sup.supplier_name; tip.appendChild(b);
-    tip.appendChild(document.createElement("br"));
-    tip.appendChild(document.createTextNode(e.sup.factory_city + ", " + e.sup.factory_country + " · " + LABEL[e.level] + " · " + e.orders.length + " open order" + (e.orders.length > 1 ? "s" : "")));
     m.bindTooltip(e.sup.supplier_name + " (click for details)");
-    m.on("click", function () { showDetail(e); });
-    m._path && m._path.setAttribute("style", "cursor:pointer");
+    m.on("click", function () { window.location.href = detailUrl(e); });
   });
   map.fitBounds(L.latLngBounds(pts).pad(0.1));
 })();
