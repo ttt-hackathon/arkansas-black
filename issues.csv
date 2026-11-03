@@ -1,0 +1,22 @@
+issue_id,category,issue,suppliers_affected,evidence_from_suppliers_csv,annual_spend_at_risk_usd,priority
+1,Single point of failure,Only battery-pack supplier; its lithium-ion cells are imported from Samsung SDI in South Korea,Cataloochee Cell Works,Notes say "Our only battery-pack supplier" and cells come from Samsung SDI,2460000,High
+2,Single point of failure,Sole frame maker for all three bike models,Giant Manufacturing,Aluminum frames (all three models) built under OEM contract in Taichung Taiwan,1610000,High
+3,Single point of failure,Largest spend; supplier sets motor allocation quarterly,Bosch eBike Systems,Notes say allocation is set quarterly; single plant in Miskolc Hungary,2820000,High
+4,Single point of failure,Drivetrains come from one Malaysian factory,Shimano,Ships from Shimano Components (Malaysia) in Johor,705000,Medium
+5,Geographic concentration,Four suppliers in Taiwan could be hit by one typhoon / earthquake / power shortage / Taiwan Strait event,"Giant; Fox Factory; Tektro; KMC Chain",All in Taichung or Tainan Taiwan (about 27% of total spend),3008000,High
+6,Port concentration,11 of 13 suppliers land at Savannah or Charleston so one hurricane / strike / congestion event hits many parts,"Bafang; Giant; Fox; Shimano; KMC; Tektro (Savannah); Bosch; Continental; DT Swiss; Busch & Muller; Selle Royal (Charleston)",us_port_of_entry column: Savannah 6 and Charleston 5,8676000,High
+7,Regional concentration,Five European suppliers share North Sea / Mediterranean ports and the Charleston route,"Bosch; Continental; DT Swiss; Busch & Muller; Selle Royal",Ship via Hamburg / Bremerhaven / Rotterdam / Genoa to Charleston,4108000,Medium
+8,Long lead times,Orders take months so a disruption takes 3-4 months to show up in inventory,"Bosch (112 days); Shimano (105); Giant (98); Fox (91); Bafang (84)",lead_time_days column,6770000,High
+9,Weak delivery record,Lowest on-time delivery in the last 12 months,Shimano (84%); Fox (86%); Bosch (88%),on_time_delivery_pct_last_12_months column,4305000,Medium
+10,Contracts ending soon,Contracts end 2027-03-31 (about 5 months away); renegotiation could mean higher prices or lower priority,Bafang; KMC Chain; Busch & Muller,contract_end column,1343000,High
+11,Contracts ending,Contracts end 2027-06-30,Cataloochee; Fox; Tektro; DT Swiss,contract_end column,4190000,Medium
+12,Cash and payment pressure,30% deposit and balance before shipment ties up cash through an 84-day lead time,Bafang,payment_terms column,855000,Medium
+13,Weather and natural disasters,"Taiwan typhoons / earthquakes, Malaysian monsoon, western NC flooding, Atlantic hurricanes","Giant; Fox; Tektro; KMC; Shimano; Cataloochee; Savannah and Charleston ports",Factory locations and ports in suppliers.csv,6173000,Medium
+14,Geopolitical and trade,Tariffs and export controls; Taiwan Strait tension; Korean cell imports,"Bafang; Giant; Fox; Tektro; KMC; Cataloochee",Factories in China / Taiwan; Cataloochee cells from South Korea,6323000,Medium
+15,Labor actions,Port strikes and factory strikes at single-source suppliers,"Giant; Bosch; Shimano; Cataloochee; ports",Single-source suppliers plus port dependence,7595000,Medium
+16,Factory incidents,"Fire, explosion or cyberattack at a single-source plant","Giant; Bosch; Shimano; Cataloochee; Tektro",Single plant per supplier,8105000,Medium
+17,Financial trouble,Supplier financial problems could lead to tighter terms or stopped shipments,Any supplier,Cannot be judged from suppliers.csv alone,,Low
+18,Raw material shortages,Battery cell supply and aluminum prices,Cataloochee (cells); Giant (aluminum),Parts supplied and Cataloochee note,4070000,Medium
+19,Regulatory changes,EU chemical rules and US e-bike battery import rules,Bosch; Continental; Cataloochee,Countries of origin,5616000,Low
+20,Public health events,Outbreaks could close overseas factories or ports,All overseas suppliers (11),Factory countries,8676000,Low
+21,Energy shortages,Taiwan and European power grid problems,"Giant; Fox; Tektro; KMC; Bosch; Continental; DT Swiss; Busch & Muller; Selle Royal",Factory locations,7116000,Low
